@@ -1,35 +1,52 @@
 module Main where
 
-import Prelude (show, (+), (-))
+import Prelude
 
-import Data.Maybe
+import Data.Maybe (Maybe(..), maybe)
+import Effect (Effect)
+import Effect.Class (class MonadEffect)
+import Effect.Random (random)
 import Halogen as H
+import Halogen.Aff (awaitBody, runHalogenAff)
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
+import Halogen.VDom.Driver (runUI)
 
-data Action = Increment | Decrement
+main :: Effect Unit
+main = runHalogenAff do
+  body <- awaitBody
+  runUI component unit body
 
+type State = Maybe Number
+
+data Action = Regenerate
+
+component :: forall query input output m. MonadEffect m => H.Component HH.HTML query input output m
 component =
   H.mkComponent
     { initialState
     , render
-    , eval: H.mkEval H.defaultEval { handleAction = handleAction }
+    , eval: H.mkEval $ H.defaultEval { handleAction = handleAction }
     }
-  where
-  initialState _ = 0
 
-  render state =
-    HH.div_
-      [ HH.button [ HE.onClick \_ -> Just Decrement ] [ HH.text "-" ]
-      , HH.text (show state)
-      , HH.button [ HE.onClick \_ -> Just Increment ] [ HH.text "+" ]
-      ]
+initialState :: forall input. input -> State
+initialState _ = Nothing
 
-  handleAction = case _ of
-    Decrement ->
-      H.modify_ \state -> state - 1
+render :: forall m. State -> H.ComponentHTML Action () m
+render state = do
+  let value = maybe "No number generated yet" show state
+  HH.div_
+    [ HH.h1_
+        [ HH.text "Random number" ]
+    , HH.p_
+        [ HH.text ("Current value: " <> value) ]
+    , HH.button
+        [ HE.onClick \_ -> Just Regenerate ]
+        [ HH.text "Generate new number" ]
+    ]
 
-    Increment ->
-      H.modify_ \state -> state + 1
-
-main = ""
+handleAction :: forall output m. MonadEffect m => Action -> H.HalogenM State Action () output m Unit
+handleAction = case _ of
+  Regenerate -> do
+    newNumber <- H.liftEffect random
+    H.modify_ \_ -> Just newNumber
